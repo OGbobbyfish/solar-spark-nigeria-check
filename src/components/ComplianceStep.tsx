@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
-import { FileCheck, AlertTriangle, CheckCircle, ExternalLink } from 'lucide-react';
+import { CheckCircle, Circle, FileCheck, AlertTriangle, Info } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface ComplianceStepProps {
   data: any;
@@ -12,265 +13,278 @@ interface ComplianceStepProps {
   onNext: () => void;
 }
 
-const complianceRequirements = [
+const complianceItems = [
   {
-    id: 1,
-    category: 'NERC (Nigerian Electricity Regulatory Commission)',
-    requirement: 'Embedded Generation License Application',
-    description: 'Required for solar installations > 1MW or grid-connected systems',
-    mandatory: true,
-    link: 'https://nerc.gov.ng'
-  },
-  {
-    id: 2,
+    id: 'nerc_license',
     category: 'NERC',
-    requirement: 'Grid Connection Agreement',
-    description: 'Agreement with Distribution Company (DisCo) for grid interconnection',
+    title: 'Electricity Generation License',
+    description: 'Valid license from Nigerian Electricity Regulatory Commission',
     mandatory: true,
-    link: 'https://nerc.gov.ng'
+    status: false
   },
   {
-    id: 3,
-    category: 'SON (Standards Organisation of Nigeria)',
-    requirement: 'Equipment Standards Compliance',
-    description: 'Solar panels and inverters must meet Nigerian Industrial Standards (NIS)',
+    id: 'environmental_impact',
+    category: 'NESREA',
+    title: 'Environmental Impact Assessment',
+    description: 'Environmental compliance clearance from NESREA',
     mandatory: true,
-    link: 'https://son.gov.ng'
+    status: false
   },
   {
-    id: 4,
-    category: 'NESREA (Environmental Agency)',
-    requirement: 'Environmental Impact Assessment',
-    description: 'Required for large-scale installations (>10MW typically)',
+    id: 'son_standards',
+    category: 'SON',
+    title: 'Standards Organization Compliance',
+    description: 'Solar equipment meets SON certification standards',
+    mandatory: true,
+    status: false
+  },
+  {
+    id: 'grid_connection',
+    category: 'DisCo',
+    title: 'Grid Connection Agreement',
+    description: 'Signed interconnection agreement with Distribution Company',
+    mandatory: true,
+    status: false
+  },
+  {
+    id: 'land_use',
+    category: 'State Govt',
+    title: 'Land Use Certificate',
+    description: 'Valid certificate of occupancy or land use permit',
+    mandatory: true,
+    status: false
+  },
+  {
+    id: 'fire_safety',
+    category: 'Fire Service',
+    title: 'Fire Safety Certificate',
+    description: 'Fire safety clearance for solar installation',
     mandatory: false,
-    link: 'https://nesrea.gov.ng'
+    status: false
   },
   {
-    id: 5,
-    category: 'Local Government',
-    requirement: 'Building/Construction Permits',
-    description: 'Local permits for structural modifications and installations',
-    mandatory: true,
-    link: '#'
-  },
-  {
-    id: 6,
-    category: 'Fire Safety',
-    requirement: 'Fire Safety Compliance',
-    description: 'Fire safety clearance for commercial installations',
-    mandatory: true,
-    link: '#'
-  },
-  {
-    id: 7,
+    id: 'insurance',
     category: 'Insurance',
-    requirement: 'Project Insurance Coverage',
-    description: 'Comprehensive insurance for PPA project assets',
+    title: 'Equipment Insurance',
+    description: 'Comprehensive insurance coverage for solar assets',
     mandatory: false,
-    link: '#'
+    status: false
   }
 ];
 
 const ComplianceStep: React.FC<ComplianceStepProps> = ({ data, onUpdate, onNext }) => {
-  const [checkedItems, setCheckedItems] = useState<number[]>([]);
-  const [score, setScore] = useState(0);
+  const [checklist, setChecklist] = useState(complianceItems);
+  const [notes, setNotes] = useState(data.compliance?.notes || '');
+  const [isCompleted, setIsCompleted] = useState(false);
 
   useEffect(() => {
-    const completedItems = checkedItems.length;
-    const totalItems = complianceRequirements.length;
-    const calculatedScore = Math.round((completedItems / totalItems) * 100);
+    calculateCompliance();
+  }, [checklist]);
+
+  const calculateCompliance = () => {
+    const completedItems = checklist.filter(item => item.status).length;
+    const mandatoryItems = checklist.filter(item => item.mandatory);
+    const completedMandatory = mandatoryItems.filter(item => item.status).length;
     
-    setScore(calculatedScore);
+    const score = Math.round((completedItems / checklist.length) * 100);
+    const mandatoryScore = Math.round((completedMandatory / mandatoryItems.length) * 100);
+    
+    const canProceed = mandatoryScore >= 80; // At least 80% of mandatory items
+    
+    setIsCompleted(canProceed);
     
     onUpdate({
       compliance: {
-        score: calculatedScore,
+        score,
+        mandatoryScore,
         completedItems,
-        totalItems,
-        checkedRequirements: checkedItems
+        totalItems: checklist.length,
+        completedMandatory,
+        totalMandatory: mandatoryItems.length,
+        canProceed,
+        checklist,
+        notes
       }
     });
-  }, [checkedItems, onUpdate]);
+  };
 
-  const handleCheckboxChange = (requirementId: number, checked: boolean) => {
-    setCheckedItems(prev => 
-      checked 
-        ? [...prev, requirementId]
-        : prev.filter(id => id !== requirementId)
+  const toggleItem = (id: string) => {
+    setChecklist(prev => 
+      prev.map(item => 
+        item.id === id ? { ...item, status: !item.status } : item
+      )
     );
+    
+    toast({
+      title: "Compliance Updated",
+      description: "Checklist item status updated.",
+    });
   };
 
-  const mandatoryRequirements = complianceRequirements.filter(req => req.mandatory);
-  const mandatoryCompleted = mandatoryRequirements.filter(req => 
-    checkedItems.includes(req.id)
-  ).length;
-  const mandatoryTotal = mandatoryRequirements.length;
-
-  const canProceed = mandatoryCompleted >= mandatoryTotal * 0.6; // At least 60% of mandatory items
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getScoreBackground = (score: number) => {
-    if (score >= 80) return 'bg-green-50 border-green-200';
-    if (score >= 60) return 'bg-yellow-50 border-yellow-200';
-    return 'bg-red-50 border-red-200';
-  };
+  const mandatoryItems = checklist.filter(item => item.mandatory);
+  const optionalItems = checklist.filter(item => !item.mandatory);
+  const completedCount = checklist.filter(item => item.status).length;
+  const completionPercentage = Math.round((completedCount / checklist.length) * 100);
 
   return (
     <div className="space-y-6">
-      {/* Compliance Score */}
-      <Card className={`${getScoreBackground(score)}`}>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto">
-              {score >= 80 ? (
-                <CheckCircle className="h-8 w-8 text-green-600" />
-              ) : score >= 60 ? (
-                <FileCheck className="h-8 w-8 text-yellow-600" />
-              ) : (
-                <AlertTriangle className="h-8 w-8 text-red-600" />
-              )}
-            </div>
-            <div>
-              <h3 className={`text-3xl font-bold ${getScoreColor(score)}`}>{score}%</h3>
-              <p className="text-gray-700">Compliance Score</p>
-              <p className="text-sm text-gray-600 mt-1">
-                {checkedItems.length} of {complianceRequirements.length} requirements completed
-              </p>
-            </div>
+      {/* Progress Overview */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-medium text-blue-900 flex items-center gap-2">
+              <FileCheck className="h-5 w-5" />
+              Compliance Progress
+            </h3>
+            <span className="text-2xl font-bold text-blue-700">{completionPercentage}%</span>
+          </div>
+          <Progress value={completionPercentage} className="h-3 mb-2" />
+          <div className="text-sm text-blue-700">
+            {completedCount} of {checklist.length} requirements completed
           </div>
         </CardContent>
       </Card>
 
-      {/* Progress Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium text-blue-900">Mandatory Requirements</span>
-                <span className="text-blue-700">{mandatoryCompleted}/{mandatoryTotal}</span>
-              </div>
-              <Progress 
-                value={(mandatoryCompleted / mandatoryTotal) * 100} 
-                className="h-2"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-purple-50 border-purple-200">
-          <CardContent className="p-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium text-purple-900">Overall Progress</span>
-                <span className="text-purple-700">{checkedItems.length}/{complianceRequirements.length}</span>
-              </div>
-              <Progress 
-                value={score} 
-                className="h-2"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Compliance Checklist */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <FileCheck className="h-5 w-5" />
-          Regulatory Compliance Checklist
-        </h3>
-        
-        <div className="space-y-3">
-          {complianceRequirements.map((requirement) => (
-            <Card key={requirement.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start space-x-3">
-                  <Checkbox
-                    id={`requirement-${requirement.id}`}
-                    checked={checkedItems.includes(requirement.id)}
-                    onCheckedChange={(checked) => 
-                      handleCheckboxChange(requirement.id, checked as boolean)
-                    }
-                    className="mt-1"
-                  />
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label 
-                        htmlFor={`requirement-${requirement.id}`}
-                        className="text-base font-medium cursor-pointer"
-                      >
-                        {requirement.requirement}
-                        {requirement.mandatory && (
-                          <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                            Mandatory
-                          </span>
-                        )}
-                      </Label>
-                      {requirement.link !== '#' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto p-1"
-                          onClick={() => window.open(requirement.link, '_blank')}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      <div className="font-medium text-blue-700">{requirement.category}</div>
-                      <div>{requirement.description}</div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Compliance Status Message */}
-      <div className={`rounded-lg p-4 ${
-        score >= 80 
-          ? 'bg-green-100 text-green-800 border border-green-200'
-          : score >= 60
-            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-            : 'bg-red-100 text-red-800 border border-red-200'
-      }`}>
-        <div className="flex items-center gap-2">
-          {score >= 80 ? (
-            <CheckCircle className="h-5 w-5" />
-          ) : score >= 60 ? (
-            <FileCheck className="h-5 w-5" />
-          ) : (
+      {/* Mandatory Requirements */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-700">
             <AlertTriangle className="h-5 w-5" />
-          )}
-          <div className="font-medium">
-            {score >= 80 
-              ? 'Excellent Compliance Status!'
-              : score >= 60
-                ? 'Good Compliance Progress'
-                : 'Compliance Attention Required'
-            }
-          </div>
-        </div>
-        <p className="text-sm mt-2">
-          {score >= 80 
-            ? 'Your project meets most regulatory requirements. You\'re ready to proceed with implementation.'
-            : score >= 60
-              ? 'You\'ve completed most requirements. Address remaining mandatory items before proceeding.'
-              : 'Several mandatory requirements need attention. Focus on NERC and SON compliance first.'
-          }
-        </p>
-      </div>
+            Mandatory Requirements
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {mandatoryItems.map((item) => (
+            <div
+              key={item.id}
+              className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                item.status 
+                  ? 'border-green-200 bg-green-50' 
+                  : 'border-red-200 bg-red-50 hover:bg-red-100'
+              }`}
+              onClick={() => toggleItem(item.id)}
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-1">
+                  {item.status ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-red-500" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className={`font-medium ${item.status ? 'text-green-900' : 'text-red-900'}`}>
+                      {item.title}
+                    </h4>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      item.status ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                    }`}>
+                      {item.category}
+                    </span>
+                  </div>
+                  <p className={`text-sm mt-1 ${item.status ? 'text-green-700' : 'text-red-700'}`}>
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
-      {canProceed && (
+      {/* Optional Requirements */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-700">
+            <Info className="h-5 w-5" />
+            Optional Requirements
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {optionalItems.map((item) => (
+            <div
+              key={item.id}
+              className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                item.status 
+                  ? 'border-green-200 bg-green-50' 
+                  : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+              }`}
+              onClick={() => toggleItem(item.id)}
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-1">
+                  {item.status ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-gray-400" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className={`font-medium ${item.status ? 'text-green-900' : 'text-gray-900'}`}>
+                      {item.title}
+                    </h4>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      item.status ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {item.category}
+                    </span>
+                  </div>
+                  <p className={`text-sm mt-1 ${item.status ? 'text-green-700' : 'text-gray-600'}`}>
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Notes Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Additional Notes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Label htmlFor="compliance-notes">Compliance Notes & Action Items</Label>
+          <Textarea
+            id="compliance-notes"
+            placeholder="Add any notes about compliance status, pending actions, or regulatory contacts..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="mt-2"
+            rows={4}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Status Summary */}
+      <Card className={isCompleted ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}>
+        <CardContent className="p-4">
+          <div className="text-center">
+            {isCompleted ? (
+              <div>
+                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <h3 className="font-medium text-green-900">Ready to Proceed</h3>
+                <p className="text-sm text-green-700 mt-1">
+                  Minimum compliance requirements met for PPA project
+                </p>
+              </div>
+            ) : (
+              <div>
+                <AlertTriangle className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
+                <h3 className="font-medium text-yellow-900">Action Required</h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  Complete mandatory requirements before proceeding
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {isCompleted && (
         <div className="pt-4 border-t">
           <Button
             onClick={onNext}
