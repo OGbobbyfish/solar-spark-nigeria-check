@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import LocationStep from '@/components/LocationStep';
+import InteractiveMapStep from '@/components/InteractiveMapStep';
 import SiteInfoStep from '@/components/SiteInfoStep';
 import SolarCalculatorStep from '@/components/SolarCalculatorStep';
 import SavingsStep from '@/components/SavingsStep';
@@ -54,9 +54,9 @@ const Index = () => {
   const steps = [
     { 
       title: 'Location', 
-      description: 'Select your site location',
+      description: 'Select location on interactive map',
       icon: MapPin,
-      component: LocationStep 
+      component: InteractiveMapStep 
     },
     { 
       title: 'Site Info', 

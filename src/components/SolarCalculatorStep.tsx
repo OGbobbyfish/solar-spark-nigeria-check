@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,34 +57,33 @@ const SolarCalculatorStep: React.FC<SolarCalculatorStepProps> = ({ data, onUpdat
   const [isCalculated, setIsCalculated] = useState(false);
 
   useEffect(() => {
-    if (data.location?.state && data.siteInfo?.systemSize) {
+    if (data.solarData?.irradiance && data.siteInfo?.systemSize) {
       calculateSolarOutput();
     }
-  }, [data.location?.state, data.siteInfo?.systemSize]);
+  }, [data.solarData?.irradiance, data.siteInfo?.systemSize]);
 
   const calculateSolarOutput = () => {
-    const state = data.location?.state;
     const systemSize = data.siteInfo?.systemSize || 0;
     
-    // Get irradiance for the state (default to 4.5 if state not found)
-    const stateIrradiance = solarIrradianceData[state as keyof typeof solarIrradianceData] || 4.5;
+    // Use real irradiance data from NASA POWER API
+    const realIrradiance = data.solarData?.irradiance || 4.5;
     
     // Calculate daily output (kWh/day) = System Size (kW) × Solar Irradiance (kWh/m²/day)
-    const daily = systemSize * stateIrradiance;
+    const daily = systemSize * realIrradiance;
     
     // Calculate annual output
     const annual = daily * 365;
     
     setDailyOutput(Math.round(daily * 10) / 10);
     setAnnualOutput(Math.round(annual));
-    setIrradiance(stateIrradiance);
+    setIrradiance(realIrradiance);
     setIsCalculated(true);
     
     onUpdate({
       solarData: {
         dailyOutput: Math.round(daily * 10) / 10,
         annualOutput: Math.round(annual),
-        irradiance: stateIrradiance
+        irradiance: realIrradiance
       }
     });
   };
