@@ -107,12 +107,21 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
         }
       );
 
-      // Calculate average annual solar irradiance
+      // Calculate average annual solar irradiance with proper type checking
       const irradianceData = solarResponse.data.properties.parameter.ALLSKY_SFC_SW_DWN;
       const tempData = solarResponse.data.properties.parameter.T2M;
       
-      const avgIrradiance = Object.values(irradianceData).reduce((a: any, b: any) => a + b, 0) / Object.values(irradianceData).length;
-      const avgTemp = Object.values(tempData).reduce((a: any, b: any) => a + b, 0) / Object.values(tempData).length;
+      // Ensure we have valid numerical data
+      const irradianceValues = Object.values(irradianceData).filter((val): val is number => typeof val === 'number' && !isNaN(val));
+      const tempValues = Object.values(tempData).filter((val): val is number => typeof val === 'number' && !isNaN(val));
+      
+      const avgIrradiance = irradianceValues.length > 0 
+        ? irradianceValues.reduce((a, b) => a + b, 0) / irradianceValues.length 
+        : 4.5; // fallback value
+        
+      const avgTemp = tempValues.length > 0 
+        ? tempValues.reduce((a, b) => a + b, 0) / tempValues.length 
+        : 25; // fallback value
 
       // Get address using reverse geocoding
       const geocodeResponse = await axios.get(
