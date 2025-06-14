@@ -1,14 +1,12 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
+import L from 'leaflet';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { MapPin, Sun, Loader2, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import 'leaflet/dist/leaflet.css';
 
 interface InteractiveMapStepProps {
   data: any;
@@ -25,58 +23,48 @@ interface SolarData {
 
 const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate, onNext }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const marker = useRef<mapboxgl.Marker | null>(null);
+  const map = useRef<L.Map | null>(null);
+  const marker = useRef<L.Marker | null>(null);
   
-  const [mapboxToken, setMapboxToken] = useState('');
-  const [isTokenValid, setIsTokenValid] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<SolarData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Initialize map when token is provided
+  // Initialize map
   useEffect(() => {
-    if (!mapboxToken || !mapContainer.current || map.current) return;
+    if (!mapContainer.current || map.current) return;
 
-    try {
-      mapboxgl.accessToken = mapboxToken;
-      setIsTokenValid(true);
-      
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/satellite-streets-v12',
-        center: [8.6753, 9.0820], // Center of Nigeria
-        zoom: 5.5,
-        projection: 'mercator'
-      });
+    // Fix for default markers in Leaflet
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    });
 
-      // Add navigation controls
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.current = L.map(mapContainer.current).setView([9.0820, 8.6753], 6);
 
-      // Add click handler for solar data
-      map.current.on('click', handleMapClick);
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map.current);
 
-      // Add Nigeria bounds
-      map.current.fitBounds([
-        [2.676932, 4.240594], // Southwest coordinates
-        [14.577222, 13.885645] // Northeast coordinates
-      ]);
+    // Set bounds to Nigeria
+    const nigeriaBounds = L.latLngBounds(
+      [4.240594, 2.676932], // Southwest
+      [13.885645, 14.577222] // Northeast
+    );
+    map.current.fitBounds(nigeriaBounds);
 
-    } catch (error) {
-      setIsTokenValid(false);
-      toast({
-        title: "Invalid Mapbox Token",
-        description: "Please check your Mapbox access token.",
-        variant: "destructive"
-      });
-    }
+    // Add click handler for solar data
+    map.current.on('click', handleMapClick);
 
     return () => {
       map.current?.remove();
     };
-  }, [mapboxToken]);
+  }, []);
 
-  const handleMapClick = async (e: mapboxgl.MapMouseEvent) => {
-    const { lng, lat } = e.lngLat;
+  const handleMapClick = async (e: L.LeafletMouseEvent) => {
+    const { lat, lng } = e.latlng;
     
     // Check if click is within Nigeria bounds (approximate)
     if (lng < 2.5 || lng > 15 || lat < 4 || lat > 14) {
@@ -123,18 +111,20 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
         ? tempValues.reduce((a, b) => a + b, 0) / tempValues.length 
         : 25; // fallback value
 
-      // Get address using reverse geocoding
+      // Get address using Nominatim (OpenStreetMap's geocoding service)
       const geocodeResponse = await axios.get(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json`,
+        `https://nominatim.openstreetmap.org/reverse`,
         {
           params: {
-            access_token: mapboxToken,
-            country: 'NG'
+            lat: lat.toFixed(6),
+            lon: lng.toFixed(6),
+            format: 'json',
+            countrycodes: 'ng'
           }
         }
       );
 
-      const address = geocodeResponse.data.features[0]?.place_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      const address = geocodeResponse.data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
       const solarData: SolarData = {
         irradiance: Number((avgIrradiance / 1000 * 24).toFixed(2)), // Convert to kWh/m²/day
@@ -147,12 +137,20 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
 
       // Update marker
       if (marker.current) {
-        marker.current.remove();
+        map.current?.removeLayer(marker.current);
       }
       
-      marker.current = new mapboxgl.Marker({ color: '#059669' })
-        .setLngLat([lng, lat])
-        .addTo(map.current!);
+      marker.current = L.marker([lat, lng], {
+        icon: L.icon({
+          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+          iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        })
+      }).addTo(map.current!);
 
       // Update parent component data
       onUpdate({
@@ -200,63 +198,6 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
     return foundState || 'FCT';
   };
 
-  const validateToken = () => {
-    if (!mapboxToken) {
-      toast({
-        title: "Token Required",
-        description: "Please enter your Mapbox access token.",
-        variant: "destructive"
-      });
-      return;
-    }
-    // Token validation happens in useEffect
-  };
-
-  if (!isTokenValid) {
-    return (
-      <div className="space-y-6">
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-6">
-            <div className="text-center space-y-4">
-              <MapPin className="h-12 w-12 text-blue-600 mx-auto" />
-              <div>
-                <h3 className="text-lg font-semibold text-blue-900">Interactive Solar Map</h3>
-                <p className="text-blue-700 mt-2">
-                  Click anywhere on the map to get real-time solar potential data for that location in Nigeria.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <div>
-              <Label htmlFor="mapbox-token">Mapbox Access Token</Label>
-              <Input
-                id="mapbox-token"
-                type="password"
-                placeholder="pk.ey..."
-                value={mapboxToken}
-                onChange={(e) => setMapboxToken(e.target.value)}
-                className="mt-2"
-              />
-              <p className="text-sm text-gray-600 mt-2">
-                Get your free token at{' '}
-                <a href="https://mapbox.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                  mapbox.com
-                </a>
-              </p>
-            </div>
-            <Button onClick={validateToken} className="w-full">
-              Initialize Map
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Instructions */}
@@ -282,7 +223,7 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
             className="h-96 w-full rounded-lg relative"
           />
           {isLoading && (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg z-[1000]">
               <div className="bg-white p-4 rounded-lg flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Fetching solar data...</span>
