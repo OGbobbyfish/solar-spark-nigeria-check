@@ -4,8 +4,11 @@ import L from 'leaflet';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Sun, Loader2, Info, Target, CheckCircle } from 'lucide-react';
+import { MapPin, Sun, Loader2, Info, Target, CheckCircle, Zap, Search } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import AddressSearchInput from './AddressSearchInput';
+import QuickLocationButtons from './QuickLocationButtons';
+import GPSLocationButton from './GPSLocationButton';
 import 'leaflet/dist/leaflet.css';
 
 interface InteractiveMapStepProps {
@@ -28,6 +31,7 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
   const [selectedLocation, setSelectedLocation] = useState<SolarData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(true);
 
   // Initialize map
   useEffect(() => {
@@ -42,7 +46,7 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
     });
 
     map.current = L.map(mapContainer.current, {
-      zoomControl: false // We'll add custom zoom controls
+      zoomControl: false
     }).setView([9.0820, 8.6753], 6);
 
     // Add OpenStreetMap tiles
@@ -67,13 +71,38 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
     map.current.on('click', handleMapClick);
 
     // Add interaction tracking
-    map.current.on('movestart', () => setHasInteracted(true));
-    map.current.on('zoomstart', () => setHasInteracted(true));
+    map.current.on('movestart', () => {
+      setHasInteracted(true);
+      setShowTutorial(false);
+    });
+    map.current.on('zoomstart', () => {
+      setHasInteracted(true);
+      setShowTutorial(false);
+    });
+
+    // Hide tutorial after 10 seconds
+    const tutorialTimer = setTimeout(() => {
+      setShowTutorial(false);
+    }, 10000);
 
     return () => {
       map.current?.remove();
+      clearTimeout(tutorialTimer);
     };
   }, []);
+
+  const handleLocationSelect = async (lat: number, lng: number, address: string) => {
+    setHasInteracted(true);
+    setShowTutorial(false);
+    
+    // Center map on selected location
+    if (map.current) {
+      map.current.setView([lat, lng], 12);
+    }
+    
+    // Trigger the same logic as map click
+    await handleMapClick({ latlng: { lat, lng } } as L.LeafletMouseEvent);
+  };
 
   const handleMapClick = async (e: L.LeafletMouseEvent) => {
     const { lat, lng } = e.latlng;
@@ -90,6 +119,7 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
 
     setIsLoading(true);
     setHasInteracted(true);
+    setShowTutorial(false);
     
     try {
       // Show immediate visual feedback
@@ -228,18 +258,48 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
           <div className="flex items-start gap-3">
             <Target className="h-5 w-5 text-blue-600 mt-0.5" />
             <div>
-              <h3 className="font-medium text-blue-900">Select Your Project Location</h3>
+              <h3 className="font-medium text-blue-900">Find Your Project Location</h3>
               <p className="text-blue-700 text-sm mt-1">
-                Click anywhere on the map to get real-time solar irradiance data for that location. 
-                We'll automatically calculate the solar potential using NASA satellite data.
+                Choose your preferred method below to select your solar project location. 
+                We'll provide real-time solar irradiance data using NASA satellite information.
               </p>
-              {!hasInteracted && (
-                <div className="mt-2 text-xs text-blue-600 bg-blue-100 rounded px-2 py-1 inline-block">
-                  💡 Tip: Zoom in for more precise location selection
-                </div>
-              )}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Multiple Input Methods */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Address Search */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Search className="h-4 w-4 text-gray-600" />
+              <h4 className="font-medium text-gray-900">Search Address</h4>
+            </div>
+            <AddressSearchInput
+              onLocationSelect={handleLocationSelect}
+              placeholder="Enter city, address, or landmark..."
+            />
+          </CardContent>
+        </Card>
+
+        {/* GPS Location */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="h-4 w-4 text-gray-600" />
+              <h4 className="font-medium text-gray-900">Use GPS</h4>
+            </div>
+            <GPSLocationButton onLocationSelect={handleLocationSelect} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Location Buttons */}
+      <Card>
+        <CardContent className="p-4">
+          <QuickLocationButtons onLocationSelect={handleLocationSelect} />
         </CardContent>
       </Card>
 
@@ -262,12 +322,25 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
             </div>
           )}
           
-          {/* Map overlay instructions for first-time users */}
-          {!hasInteracted && !selectedLocation && (
-            <div className="absolute top-4 left-4 bg-white bg-opacity-90 backdrop-blur-sm rounded-lg p-3 shadow-sm z-[500] max-w-xs">
-              <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-blue-600" />
-                <span className="font-medium">Click on the map to select a location</span>
+          {/* Animated Tutorial Overlay */}
+          {showTutorial && !selectedLocation && (
+            <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center rounded-lg z-[500] animate-fade-in">
+              <div className="bg-white bg-opacity-95 backdrop-blur-sm rounded-lg p-4 shadow-lg max-w-sm mx-4 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <MapPin className="h-5 w-5 text-blue-600 animate-bounce" />
+                  <span className="font-medium text-gray-900">Click anywhere on the map</span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Or use the search and location tools above for faster selection
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowTutorial(false)}
+                  className="mt-2 text-xs"
+                >
+                  Got it
+                </Button>
               </div>
             </div>
           )}
@@ -283,7 +356,7 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
                 <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-green-900 text-lg">Location Selected!</h3>
+                <h3 className="font-semibold text-green-900 text-lg">Perfect! Location Selected</h3>
                 <p className="text-green-800 text-sm mt-1 mb-4">{selectedLocation.address}</p>
                 
                 <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -308,8 +381,9 @@ const InteractiveMapStep: React.FC<InteractiveMapStepProps> = ({ data, onUpdate,
                       <div className="text-2xl font-bold text-green-600">
                         {(selectedLocation.irradiance * 365).toLocaleString()} kWh/m²
                       </div>
-                      <div className="text-sm text-gray-600">
-                        Excellent for PPA projects
+                      <div className="text-sm text-green-600 flex items-center gap-1">
+                        <Zap className="h-3 w-3" />
+                        Great for PPA projects
                       </div>
                     </div>
                   </div>
